@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1a1c">
+<link rel="manifest" href="manifest.webmanifest">
+<title>AirWatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one hero reading (big number + verdict) beside pollutant detail and a 24h strip; stacks on phones. */
+:root{
+  --bg:#f3f6f5; --surface:#ffffff; --surface-2:#eaf0ee; --line:#d5dfdc;
+  --fg:#10201f; --muted:#5a6d6a; --accent:#0b6e6e; --accent-fg:#ffffff;
+  --good:#17895a; --normal:#b98900; --bad:#d4601a; --severe:#c0282d;
+  --font:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --radius:14px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1a1c; --surface:#16262a; --surface-2:#1d3237; --line:#2a444a;
+    --fg:#e8f2f0; --muted:#97b0ac; --accent:#4fd1c5; --accent-fg:#06211f;
+    --good:#3fd08f; --normal:#f0c33c; --bad:#ff8a4c; --severe:#ff6b6b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1a1c; --surface:#16262a; --surface-2:#1d3237; --line:#2a444a;
+  --fg:#e8f2f0; --muted:#97b0ac; --accent:#4fd1c5; --accent-fg:#06211f;
+  --good:#3fd08f; --normal:#f0c33c; --bad:#ff8a4c; --severe:#ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--font); font-size:15px; line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(14px,env(safe-area-inset-top,0px));
+  padding-bottom:max(28px,env(safe-area-inset-bottom,0px));
+  transition:background .3s;
+}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:16px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
+.brand svg{width:28px;height:28px}
+.tools{display:flex;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;background:var(--surface);overflow:hidden}
+.seg button{border:0;background:transparent;padding:7px 14px;font-weight:600;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.icon-btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+.icon-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+/* search */
+.search{position:relative}
+.search form{display:flex;gap:8px}
+.search input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);padding:13px 16px;font-size:16px}
+.search input::placeholder{color:var(--muted)}
+.btn{border:0;background:var(--accent);color:var(--accent-fg);border-radius:var(--radius);padding:0 18px;font-weight:700;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn.ghost{background:var(--surface);color:var(--fg);border:1px solid var(--line)}
+.results{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.results button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:transparent;padding:11px 16px}
+.results button:last-child{border-bottom:0}
+.results button:hover,.results button:focus-visible{background:var(--surface-2)}
+.results small{color:var(--muted)}
+.browse{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.browse label{display:grid;gap:4px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;min-width:0}
+.browse select{width:100%;font-size:15px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--fg)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 6px 5px 12px;font-size:13px;font-weight:600}
+.chip[aria-current="true"]{border-color:var(--accent)}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.chip .x{border:0;background:var(--surface-2);width:22px;height:22px;border-radius:50%;line-height:1;color:var(--muted)}
+.chip .go{border:0;background:transparent;padding:0;font-weight:600}
+
+/* alert banner */
+.banner{display:none;gap:12px;align-items:flex-start;border-radius:var(--radius);padding:14px 16px;border:1px solid var(--lv);background:color-mix(in srgb,var(--lv) 14%,var(--surface))}
+.banner.show{display:flex}
+.banner b{display:block}
+.banner button{margin-left:auto;border:0;background:transparent;font-size:20px;line-height:1;color:var(--muted)}
+
+/* main grid */
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;min-width:0}
+.card h2{margin:0 0 14px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:700}
+
+.hero{--lv:var(--muted);display:grid;gap:14px;align-content:start}
+.hero[data-level="good"]{--lv:var(--good)}
+.hero[data-level="normal"]{--lv:var(--normal)}
+.hero[data-level="bad"]{--lv:var(--bad)}
+.hero[data-level="severe"]{--lv:var(--severe)}
+.place{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.place strong{font-size:18px;overflow-wrap:anywhere}
+.place span{color:var(--muted);font-size:13px}
+.reading{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.num{font-family:var(--mono);font-weight:600;font-size:clamp(64px,16vw,96px);line-height:.9;letter-spacing:-.04em;color:var(--lv);font-variant-numeric:tabular-nums}
+.verdict{display:grid;gap:4px;padding-bottom:6px}
+.pill{display:inline-block;width:max-content;padding:5px 14px;border-radius:999px;font-weight:800;font-size:15px;color:var(--lv);background:color-mix(in srgb,var(--lv) 16%,var(--surface));border:1px solid color-mix(in srgb,var(--lv) 55%,transparent)}
+.official{font-size:13px;color:var(--muted)}
+.scale{position:relative;height:10px;border-radius:999px;margin-top:8px;background:linear-gradient(90deg,var(--good) 0 16.6%,var(--normal) 16.6% 33.3%,var(--bad) 33.3% 66.6%,var(--severe) 66.6% 100%);opacity:.9}
+.scale i{position:absolute;top:-5px;width:4px;height:20px;border-radius:3px;background:var(--fg);box-shadow:0 0 0 2px var(--surface);transform:translateX(-50%);transition:left .5s}
+.ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:4px}
+.advice{margin:6px 0 0;padding:12px 14px;border-radius:10px;background:var(--surface-2);font-size:14px}
+.updated{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+
+.pollutants{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.pol{background:var(--surface-2);border-radius:10px;padding:12px}
+.pol span{font-size:12px;color:var(--muted);font-weight:600}
+.pol b{display:block;font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.pol small{color:var(--muted);font-size:11px}
+
+.strip{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;align-items:end;height:96px}
+.strip div{border-radius:3px 3px 0 0;min-height:4px;background:var(--muted);opacity:.9;cursor:default}
+.strip-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:6px}
+.fc-note{font-size:13px;color:var(--muted);margin:10px 0 0}
+
+.settings{display:grid;gap:12px}
+.row{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.row label{font-weight:600}
+.row small{display:block;color:var(--muted);font-weight:400}
+select{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 12px;max-width:100%}
+.log{margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:13px}
+.log li{display:flex;gap:10px;align-items:baseline;border-top:1px solid var(--line);padding-top:8px}
+.log time{font-family:var(--mono);color:var(--muted);font-size:12px;flex:none}
+.empty{color:var(--muted);font-size:13px}
+.status{font-size:13px;color:var(--muted)}
+.err{color:var(--severe);font-weight:600}
+.skeleton{opacity:.5}
+footer{font-size:12px;color:var(--muted);padding-top:4px}
+footer a{color:inherit}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2.4" opacity=".25"/><path d="M6 14c4-5 8 5 12 0s6-3 8-1M6 20c4-5 8 5 12 0s6-3 8-1" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/></svg>
+      AirWatch
+    </div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="AQI scale">
+        <button type="button" id="scaleUS" aria-pressed="true">US AQI</button>
+        <button type="button" id="scaleIN" aria-pressed="false">India AQI</button>
+      </div>
+      <button type="button" class="icon-btn" id="notifyBtn" aria-pressed="false">🔔 Alerts off</button>
+    </div>
+  </header>
+
+  <section class="search" aria-label="Choose a location">
+    <form id="searchForm" autocomplete="off">
+      <input id="q" type="search" placeholder="Search any city, town or area in India" aria-label="Search for a city" enterkeyhint="search">
+      <button class="btn" type="submit">Search</button>
+      <button class="btn ghost" type="button" id="locateBtn" title="Use my current location">📍 <span class="hide-sm">My location</span></button>
+    </form>
+    <div class="results" id="results" hidden></div>
+    <div class="browse">
+      <label for="stateSel">State or territory
+        <select id="stateSel"><option value="">Choose a state</option></select>
+      </label>
+      <label for="district" id="districtWrap" hidden>District
+        <select id="district"><option value="">Choose a district</option></select>
+      </label>
+      <label for="town">City or town
+        <select id="town" disabled><option value="">Choose a state first</option></select>
+      </label>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <div class="banner" id="banner" role="alert">
+    <div><b id="bannerTitle"></b><span id="bannerBody"></span></div>
+    <button type="button" id="bannerClose" aria-label="Dismiss alert">×</button>
+  </div>
+
+  <main class="grid">
+    <section class="card hero" id="hero" data-level="" aria-live="polite">
+      <div class="place"><strong id="placeName">Finding air quality…</strong><span id="placeSub"></span></div>
+      <div class="reading">
+        <div class="num" id="aqiNum">--</div>
+        <div class="verdict">
+          <span class="pill" id="verdict">Loading</span>
+          <span class="official" id="official"></span>
+        </div>
+      </div>
+      <div>
+        <div class="scale"><i id="marker" style="left:0%"></i></div>
+        <div class="ticks"><span>0</span><span>50</span><span>100</span><span>200</span><span id="tickMax">300+</span></div>
+      </div>
+      <p class="advice" id="advice">Allow location access, or search for a city above.</p>
+      <div class="updated"><span id="updated"></span><button type="button" class="icon-btn" id="refreshBtn">↻ Refresh</button></div>
+    </section>
+
+    <div style="display:grid;gap:16px;min-width:0;align-content:start">
+      <section class="card">
+        <h2>Pollutants now (µg/m³)</h2>
+        <div class="pollutants" id="pollutants"></div>
+      </section>
+      <section class="card">
+        <h2>Next 24 hours</h2>
+        <div class="strip" id="strip"></div>
+        <div class="strip-axis"><span id="axisStart">now</span><span id="axisMid"></span><span id="axisEnd"></span></div>
+        <p class="fc-note" id="fcNote"></p>
+      </section>
+    </div>
+  </main>
+
+  <section class="card settings">
+    <h2>Alert settings</h2>
+    <div class="row">
+      <label for="threshold">Notify me when air becomes<small>Checked for your current and saved places.</small></label>
+      <select id="threshold">
+        <option value="normal">Normal or worse</option>
+        <option value="bad" selected>Bad or worse</option>
+        <option value="severe">Very bad only</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="interval">Check every<small>Runs while this page is open.</small></label>
+      <select id="interval">
+        <option value="2">2 minutes</option>
+        <option value="5" selected>5 minutes</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+      </select>
+    </div>
+    <div class="status" id="notifyStatus"></div>
+    <div>
+      <h2 style="margin-top:6px">Recent alerts</h2>
+      <ul class="log" id="log"><li class="empty">No alerts yet.</li></ul>
+    </div>
+  </section>
+
+  <footer>
+    Air quality data from <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener">Open-Meteo</a> (CAMS model, updated hourly). Values are model estimates for the area, not a reading from a single street monitor. India AQI is computed from PM2.5 and PM10 using CPCB breakpoints.
+  </footer>
+</div>
+
+<script>
+"use strict";
+(function () {
+  /* ---------- helpers ---------- */
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* ---------- AQI logic ---------- */
+  const LEVELS = {
+    good:   { rank: 0, label: "Good",     advice: "Air is clean. A great time to be outdoors." },
+    normal: { rank: 1, label: "Normal",   advice: "Air is acceptable. People unusually sensitive to pollution may want to take it easier outdoors." },
+    bad:    { rank: 2, label: "Bad",      advice: "Unhealthy for sensitive groups and uncomfortable for everyone. Limit long outdoor exercise; children, older adults and people with asthma should stay indoors where possible." },
+    severe: { rank: 3, label: "Very bad", advice: "Health risk for everyone. Avoid outdoor activity, keep windows closed and wear an N95 mask if you must go out." }
+  };
+  function levelOf(aqi) {
+    if (aqi == null || isNaN(aqi)) return null;
+    if (aqi <= 50) return "good";
+    if (aqi <= 100) return "normal";
+    if (aqi <= 200) return "bad";
+    return "severe";
+  }
+  const US_NAMES = [[50, "Good"], [100, "Moderate"], [150, "Unhealthy for sensitive groups"], [200, "Unhealthy"], [300, "Very unhealthy"], [1e9, "Hazardous"]];
+  const IN_NAMES = [[50, "Good"], [100, "Satisfactory"], [200, "Moderate"], [300, "Poor"], [400, "Very poor"], [1e9, "Severe"]];
+  const nameOf = (table, v) => table.find((r) => v <= r[0])[1];
+
+  // CPCB breakpoints: [concLow, concHigh, aqiLow, aqiHigh]
+  const BP_PM25 = [[0, 30, 0, 50], [31, 60, 51, 100], [61, 90, 101, 200], [91, 120, 201, 300], [121, 250, 301, 400], [251, 500, 401, 500]];
+  const BP_PM10 = [[0, 50, 0, 50], [51, 100, 51, 100], [101, 250, 101, 200], [251, 350, 201, 300], [351, 430, 301, 400], [431, 800, 401, 500]];
+  function subIndex(c, bps) {
+    if (c == null || isNaN(c)) return null;
+    for (const [cl, ch, il, ih] of bps) {
+      if (c <= ch) return Math.round(il + ((c - cl) * (ih - il)) / Math.max(ch - cl, 1));
+    }
+    return 500;
+  }
+  const indiaAQI = (pm25, pm10) => {
+    const a = subIndex(pm25, BP_PM25), b = subIndex(pm10, BP_PM10);
+    const v = [a, b].filter((x) => x != null);
+    return v.length ? Math.max(...v) : null;
+  };
+
+  /* ---------- Kerala districts and towns (town-centre coordinates, approximate) ---------- */
+  const KERALA = {
+    "Thiruvananthapuram": [["Thiruvananthapuram", 8.5241, 76.9366], ["Neyyattinkara", 8.3994, 77.0864], ["Attingal", 8.6960, 76.8150], ["Varkala", 8.7339, 76.7164], ["Nedumangad", 8.6035, 77.0007], ["Kovalam", 8.4004, 76.9787]],
+    "Kollam": [["Kollam", 8.8932, 76.6141], ["Karunagappally", 9.0556, 76.5392], ["Kottarakkara", 9.0017, 76.7753], ["Punalur", 9.0000, 76.9167], ["Paravur", 8.8120, 76.6590]],
+    "Pathanamthitta": [["Pathanamthitta", 9.2648, 76.7870], ["Adoor", 9.1534, 76.7313], ["Thiruvalla", 9.3840, 76.5741], ["Pandalam", 9.2260, 76.6790], ["Ranni", 9.3870, 76.7840]],
+    "Alappuzha": [["Alappuzha", 9.4981, 76.3388], ["Cherthala", 9.6840, 76.3400], ["Kayamkulam", 9.1740, 76.5010], ["Chengannur", 9.3160, 76.6110], ["Mavelikkara", 9.2590, 76.5560], ["Haripad", 9.2860, 76.4590]],
+    "Kottayam": [["Kottayam", 9.5916, 76.5222], ["Changanassery", 9.4450, 76.5410], ["Pala", 9.7080, 76.6830], ["Vaikom", 9.7490, 76.3960], ["Ettumanoor", 9.6700, 76.5610], ["Erattupetta", 9.6890, 76.7790], ["Kanjirappally", 9.5570, 76.7900]],
+    "Idukki": [["Painavu", 9.8480, 76.9690], ["Thodupuzha", 9.8960, 76.7180], ["Munnar", 10.0889, 77.0595], ["Kattappana", 9.7510, 77.1160], ["Nedumkandam", 9.8300, 77.1570], ["Adimali", 10.0150, 76.9560]],
+    "Ernakulam": [["Kochi", 9.9312, 76.2673], ["Aluva", 10.1004, 76.3570], ["Angamaly", 10.1960, 76.3860], ["Perumbavoor", 10.1130, 76.4770], ["Muvattupuzha", 9.9894, 76.5790], ["Kothamangalam", 10.0600, 76.6290], ["North Paravur", 10.1570, 76.2220], ["Thrippunithura", 9.9430, 76.3500], ["Kakkanad", 10.0159, 76.3419]],
+    "Thrissur": [["Thrissur", 10.5276, 76.2144], ["Chalakudy", 10.3070, 76.3340], ["Irinjalakuda", 10.3420, 76.2110], ["Kodungallur", 10.2270, 76.1950], ["Guruvayur", 10.5940, 76.0410], ["Kunnamkulam", 10.6480, 76.0780], ["Wadakkanchery", 10.6560, 76.2490], ["Chavakkad", 10.5600, 76.0230], ["Mala", 10.2380, 76.2630], ["Puthukkad", 10.4180, 76.2640]],
+    "Palakkad": [["Palakkad", 10.7867, 76.6548], ["Ottapalam", 10.7700, 76.3770], ["Shoranur", 10.7600, 76.2740], ["Chittur", 10.6970, 76.7480], ["Mannarkkad", 10.9930, 76.4590], ["Alathur", 10.6460, 76.5410], ["Cherpulassery", 10.8790, 76.3150]],
+    "Malappuram": [["Malappuram", 11.0510, 76.0711], ["Manjeri", 11.1200, 76.1200], ["Perinthalmanna", 10.9760, 76.2260], ["Tirur", 10.9140, 75.9230], ["Nilambur", 11.2770, 76.2290], ["Ponnani", 10.7670, 75.9250], ["Kottakkal", 10.9990, 76.0000], ["Valanchery", 10.8890, 76.0820]],
+    "Kozhikode": [["Kozhikode", 11.2588, 75.7804], ["Vatakara", 11.6050, 75.5920], ["Koyilandy", 11.4400, 75.6940], ["Feroke", 11.1840, 75.8400], ["Thamarassery", 11.4070, 75.9370], ["Mukkam", 11.3170, 75.9970]],
+    "Wayanad": [["Kalpetta", 11.6104, 76.0830], ["Mananthavady", 11.8010, 76.0040], ["Sulthan Bathery", 11.6580, 76.2580]],
+    "Kannur": [["Kannur", 11.8745, 75.3704], ["Thalassery", 11.7490, 75.4890], ["Payyannur", 12.0960, 75.2030], ["Taliparamba", 12.0390, 75.3590], ["Iritty", 11.9770, 75.6760], ["Mattannur", 11.9340, 75.5780]],
+    "Kasaragod": [["Kasaragod", 12.4996, 74.9869], ["Kanhangad", 12.3070, 75.0890], ["Nileshwar", 12.2580, 75.1330], ["Manjeshwar", 12.7120, 74.8880], ["Uppala", 12.5970, 74.9050]]
+  };
+  /* ---------- Other states and union territories: major cities and areas (approximate centres) ---------- */
+  const INDIA = {
+    "Andaman and Nicobar Islands": [["Port Blair", 11.62, 92.73]],
+    "Andhra Pradesh": [["Visakhapatnam", 17.69, 83.22], ["Vijayawada", 16.51, 80.65], ["Guntur", 16.31, 80.44], ["Tirupati", 13.63, 79.42], ["Nellore", 14.44, 79.99], ["Kurnool", 15.83, 78.04], ["Kakinada", 16.99, 82.25], ["Rajahmundry", 17.00, 81.80], ["Anantapur", 14.68, 77.60], ["Amaravati", 16.51, 80.52]],
+    "Arunachal Pradesh": [["Itanagar", 27.08, 93.61], ["Naharlagun", 27.10, 93.69], ["Pasighat", 28.07, 95.33], ["Tawang", 27.59, 91.86], ["Ziro", 27.55, 93.83]],
+    "Assam": [["Guwahati", 26.14, 91.74], ["Dibrugarh", 27.48, 94.91], ["Silchar", 24.83, 92.78], ["Jorhat", 26.75, 94.20], ["Nagaon", 26.35, 92.69], ["Tezpur", 26.63, 92.80], ["Tinsukia", 27.49, 95.36]],
+    "Bihar": [["Patna", 25.59, 85.14], ["Gaya", 24.80, 85.00], ["Bhagalpur", 25.24, 86.97], ["Muzaffarpur", 26.12, 85.39], ["Darbhanga", 26.15, 85.90], ["Purnia", 25.78, 87.47], ["Arrah", 25.56, 84.67], ["Begusarai", 25.42, 86.13]],
+    "Chandigarh": [["Chandigarh", 30.73, 76.78]],
+    "Chhattisgarh": [["Raipur", 21.25, 81.63], ["Bhilai", 21.21, 81.38], ["Bilaspur", 22.08, 82.14], ["Korba", 22.36, 82.75], ["Durg", 21.19, 81.28], ["Raigarh", 21.90, 83.40], ["Jagdalpur", 19.07, 82.02]],
+    "Dadra and Nagar Haveli and Daman and Diu": [["Daman", 20.40, 72.83], ["Silvassa", 20.27, 73.01], ["Diu", 20.71, 70.99]],
+    "Delhi": [["New Delhi", 28.61, 77.21], ["Dwarka", 28.59, 77.05], ["Rohini", 28.74, 77.07], ["Anand Vihar", 28.65, 77.32], ["Vasant Kunj", 28.52, 77.16], ["Okhla", 28.55, 77.27]],
+    "Goa": [["Panaji", 15.50, 73.83], ["Margao", 15.27, 73.96], ["Vasco da Gama", 15.40, 73.81], ["Mapusa", 15.59, 73.81], ["Ponda", 15.40, 74.02]],
+    "Gujarat": [["Ahmedabad", 23.02, 72.57], ["Surat", 21.17, 72.83], ["Vadodara", 22.31, 73.18], ["Rajkot", 22.30, 70.80], ["Gandhinagar", 23.22, 72.65], ["Bhavnagar", 21.76, 72.15], ["Jamnagar", 22.47, 70.06], ["Junagadh", 21.52, 70.46], ["Bhuj", 23.25, 69.67], ["Anand", 22.56, 72.95]],
+    "Haryana": [["Gurugram", 28.46, 77.03], ["Faridabad", 28.41, 77.31], ["Panipat", 29.39, 76.97], ["Ambala", 30.38, 76.78], ["Hisar", 29.15, 75.72], ["Rohtak", 28.89, 76.61], ["Karnal", 29.69, 76.99], ["Sonipat", 28.99, 77.02]],
+    "Himachal Pradesh": [["Shimla", 31.10, 77.17], ["Dharamshala", 32.22, 76.32], ["Manali", 32.24, 77.19], ["Solan", 30.91, 77.10], ["Mandi", 31.71, 76.93], ["Kullu", 31.96, 77.11]],
+    "Jammu and Kashmir": [["Srinagar", 34.08, 74.80], ["Jammu", 32.73, 74.86], ["Anantnag", 33.73, 75.15], ["Baramulla", 34.20, 74.36], ["Kathua", 32.37, 75.52]],
+    "Jharkhand": [["Ranchi", 23.34, 85.31], ["Jamshedpur", 22.80, 86.20], ["Dhanbad", 23.80, 86.43], ["Bokaro", 23.67, 86.15], ["Hazaribagh", 23.99, 85.36], ["Deoghar", 24.48, 86.70]],
+    "Karnataka": [["Bengaluru", 12.97, 77.59], ["Mysuru", 12.30, 76.64], ["Mangaluru", 12.91, 74.86], ["Hubballi", 15.36, 75.12], ["Belagavi", 15.85, 74.50], ["Kalaburagi", 17.33, 76.83], ["Ballari", 15.14, 76.92], ["Udupi", 13.34, 74.75], ["Shivamogga", 13.93, 75.57], ["Davangere", 14.46, 75.92], ["Tumakuru", 13.34, 77.10]],
+    "Kerala": null,
+    "Ladakh": [["Leh", 34.16, 77.58], ["Kargil", 34.56, 76.13]],
+    "Lakshadweep": [["Kavaratti", 10.57, 72.64]],
+    "Madhya Pradesh": [["Bhopal", 23.26, 77.41], ["Indore", 22.72, 75.86], ["Jabalpur", 23.18, 79.99], ["Gwalior", 26.22, 78.18], ["Ujjain", 23.18, 75.78], ["Sagar", 23.84, 78.74], ["Rewa", 24.53, 81.30], ["Satna", 24.60, 80.83]],
+    "Maharashtra": [["Mumbai", 19.08, 72.88], ["Pune", 18.52, 73.86], ["Nagpur", 21.15, 79.09], ["Nashik", 20.00, 73.79], ["Thane", 19.22, 72.98], ["Navi Mumbai", 19.03, 73.03], ["Chhatrapati Sambhajinagar (Aurangabad)", 19.88, 75.34], ["Solapur", 17.66, 75.91], ["Kolhapur", 16.70, 74.24], ["Amravati", 20.93, 77.75]],
+    "Manipur": [["Imphal", 24.82, 93.94], ["Churachandpur", 24.33, 93.68], ["Thoubal", 24.64, 94.01]],
+    "Meghalaya": [["Shillong", 25.58, 91.89], ["Tura", 25.51, 90.22], ["Jowai", 25.45, 92.21]],
+    "Mizoram": [["Aizawl", 23.73, 92.72], ["Lunglei", 22.89, 92.73], ["Champhai", 23.46, 93.33]],
+    "Nagaland": [["Kohima", 25.67, 94.11], ["Dimapur", 25.91, 93.73], ["Mokokchung", 26.32, 94.52]],
+    "Odisha": [["Bhubaneswar", 20.30, 85.82], ["Cuttack", 20.46, 85.88], ["Rourkela", 22.26, 84.85], ["Puri", 19.81, 85.83], ["Sambalpur", 21.47, 83.97], ["Berhampur", 19.31, 84.79], ["Balasore", 21.49, 86.93]],
+    "Puducherry": [["Puducherry", 11.93, 79.83], ["Karaikal", 10.92, 79.84], ["Mahe", 11.70, 75.54], ["Yanam", 16.73, 82.22]],
+    "Punjab": [["Ludhiana", 30.90, 75.86], ["Amritsar", 31.63, 74.87], ["Jalandhar", 31.33, 75.58], ["Patiala", 30.34, 76.39], ["Bathinda", 30.21, 74.95], ["Mohali", 30.70, 76.72]],
+    "Rajasthan": [["Jaipur", 26.91, 75.79], ["Jodhpur", 26.24, 73.02], ["Udaipur", 24.59, 73.71], ["Kota", 25.18, 75.84], ["Ajmer", 26.45, 74.64], ["Bikaner", 28.02, 73.31], ["Jaisalmer", 26.92, 70.90], ["Alwar", 27.56, 76.61], ["Bhilwara", 25.35, 74.64]],
+    "Sikkim": [["Gangtok", 27.33, 88.61], ["Namchi", 27.17, 88.36], ["Mangan", 27.51, 88.53], ["Gyalshing", 27.29, 88.26]],
+    "Tamil Nadu": [["Chennai", 13.08, 80.27], ["Coimbatore", 11.02, 76.96], ["Madurai", 9.93, 78.12], ["Tiruchirappalli", 10.79, 78.70], ["Salem", 11.66, 78.15], ["Tirunelveli", 8.73, 77.70], ["Erode", 11.34, 77.72], ["Vellore", 12.92, 79.13], ["Thoothukudi", 8.76, 78.13], ["Kanyakumari", 8.09, 77.54], ["Ooty", 11.41, 76.70], ["Thanjavur", 10.79, 79.14]],
+    "Telangana": [["Hyderabad", 17.39, 78.49], ["Secunderabad", 17.44, 78.50], ["Warangal", 17.97, 79.60], ["Nizamabad", 18.67, 78.09], ["Karimnagar", 18.44, 79.13], ["Khammam", 17.25, 80.15]],
+    "Tripura": [["Agartala", 23.83, 91.28], ["Udaipur (Tripura)", 23.53, 91.49], ["Dharmanagar", 24.37, 92.17]],
+    "Uttar Pradesh": [["Lucknow", 26.85, 80.95], ["Kanpur", 26.45, 80.35], ["Varanasi", 25.32, 82.97], ["Agra", 27.18, 78.01], ["Prayagraj", 25.44, 81.85], ["Noida", 28.54, 77.39], ["Ghaziabad", 28.67, 77.45], ["Meerut", 28.98, 77.71], ["Gorakhpur", 26.76, 83.37], ["Bareilly", 28.37, 79.43], ["Aligarh", 27.88, 78.08], ["Mathura", 27.49, 77.67], ["Ayodhya", 26.80, 82.20]],
+    "Uttarakhand": [["Dehradun", 30.32, 78.03], ["Haridwar", 29.95, 78.16], ["Rishikesh", 30.09, 78.27], ["Nainital", 29.39, 79.45], ["Haldwani", 29.22, 79.51], ["Roorkee", 29.85, 77.89]],
+    "West Bengal": [["Kolkata", 22.57, 88.36], ["Howrah", 22.59, 88.26], ["Durgapur", 23.55, 87.32], ["Asansol", 23.68, 86.98], ["Siliguri", 26.73, 88.40], ["Darjeeling", 27.04, 88.26], ["Kharagpur", 22.35, 87.32], ["Bardhaman", 23.23, 87.86]]
+  };
+  const LOCAL = [];
+  Object.keys(KERALA).forEach((d) => KERALA[d].forEach(([n, lat, lon]) => LOCAL.push({ name: n, region: d + " district, Kerala", state: "Kerala", district: d, lat, lon })));
+  Object.keys(INDIA).forEach((s) => (INDIA[s] || []).forEach(([n, lat, lon]) => LOCAL.push({ name: n, region: s + ", India", state: s, lat, lon })));
+  const norm = (s) => s.toLowerCase().replace(/[^a-z ]/g, "").trim();
+  function localMatches(q) {
+    const n = norm(q); if (n.length < 2) return [];
+    const byName = LOCAL.filter((l) => norm(l.name).includes(n));
+    const byGroup = LOCAL.filter((l) => !byName.includes(l) && (norm(l.state).includes(n) || (l.district && norm(l.district).includes(n))));
+    return byName.concat(byGroup).slice(0, 10);
+  }
+
+  /* ---------- state ---------- */
+  const state = {
+    loc: store.get("aw.loc", null),
+    saved: store.get("aw.saved", []),
+    scale: store.get("aw.scale", "us"),
+    threshold: store.get("aw.threshold", "bad"),
+    interval: store.get("aw.interval", 5),
+    notifyOn: store.get("aw.notifyOn", false),
+    lastLevel: store.get("aw.lastLevel", {}),
+    alerts: store.get("aw.alerts", []),
+    data: null,
+    snapshots: {},
+    timer: null
+  };
+  const keyOf = (l) => l.lat.toFixed(2) + "," + l.lon.toFixed(2);
+
+  /* ---------- API ---------- */
+  async function fetchAir(lat, lon) {
+    const u = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + lat + "&longitude=" + lon +
+      "&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone" +
+      "&hourly=us_aqi,pm10,pm2_5&forecast_days=2&timezone=auto";
+    const r = await fetch(u);
+    if (!r.ok) throw new Error("Air quality service returned " + r.status);
+    return r.json();
+  }
+  // Searches towns, villages and localities worldwide; pass "IN" to search India only.
+  async function geocode(q, country, count) {
+    const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=" + (count || 8) + "&language=en&format=json" + (country ? "&countryCode=" + country : "") + "&name=" + encodeURIComponent(q));
+    if (!r.ok) throw new Error("Search failed");
+    const j = await r.json();
+    return (j.results || []).map((x) => ({ name: x.name, region: [x.admin2, x.admin1, x.country].filter(Boolean).join(", "), lat: x.latitude, lon: x.longitude }));
+  }
+  async function reverse(lat, lon) {
+    try {
+      const r = await fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?localityLanguage=en&latitude=" + lat + "&longitude=" + lon);
+      const j = await r.json();
+      const name = j.city || j.locality || j.principalSubdivision || "Current location";
+      return { name, region: [j.principalSubdivision, j.countryName].filter(Boolean).join(", ") };
+    } catch (e) { return { name: "Current location", region: lat.toFixed(2) + ", " + lon.toFixed(2) }; }
+  }
+
+  function readingFrom(data, scale) {
+    const c = data.current;
+    const aqi = scale === "us" ? c.us_aqi : indiaAQI(c.pm2_5, c.pm10);
+    return { aqi, level: levelOf(aqi) };
+  }
+
+  /* ---------- rendering ---------- */
+  function render() {
+    const d = state.data, hero = $("hero");
+    if (!d) return;
+    const { aqi, level } = readingFrom(d.air, state.scale);
+    const L = level ? LEVELS[level] : null;
+    hero.dataset.level = level || "";
+    $("placeName").textContent = state.loc.name;
+    $("placeSub").textContent = state.loc.region || "";
+    $("aqiNum").textContent = aqi == null ? "--" : aqi;
+    $("verdict").textContent = L ? L.label : "No data";
+    $("official").textContent = aqi == null ? "" : (state.scale === "us" ? "US AQI: " + nameOf(US_NAMES, aqi) : "India AQI: " + nameOf(IN_NAMES, aqi));
+    $("advice").textContent = L ? L.advice : "No reading is available for this area right now.";
+    const max = state.scale === "us" ? 300 : 400;
+    $("tickMax").textContent = max + "+";
+    $("marker").style.left = Math.min(100, ((aqi || 0) / max) * 100) + "%";
+    const t = new Date(d.fetchedAt);
+    $("updated").textContent = "Checked " + t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " · auto-refresh every " + state.interval + " min";
+    document.title = (aqi == null ? "" : aqi + " · ") + "AirWatch";
+
+    const c = d.air.current;
+    const pols = [["PM2.5", c.pm2_5], ["PM10", c.pm10], ["Ozone", c.ozone], ["NO₂", c.nitrogen_dioxide], ["SO₂", c.sulphur_dioxide], ["CO", c.carbon_monoxide]];
+    $("pollutants").innerHTML = pols.map(([n, v]) => '<div class="pol"><span>' + n + "</span><b>" + (v == null ? "--" : Math.round(v * 10) / 10) + "</b></div>").join("");
+
+    // 24h strip
+    const h = d.air.hourly, nowKey = (c.time || "").slice(0, 13);
+    let i0 = h.time.findIndex((x) => x.slice(0, 13) >= nowKey); if (i0 < 0) i0 = 0;
+    const idx = Array.from({ length: 24 }, (_, k) => i0 + k).filter((i) => i < h.time.length);
+    const vals = idx.map((i) => (state.scale === "us" ? h.us_aqi[i] : indiaAQI(h.pm2_5[i], h.pm10[i])));
+    const top = Math.max(100, ...vals.filter((v) => v != null));
+    $("strip").innerHTML = idx.map((i, k) => {
+      const v = vals[k], lv = levelOf(v), hr = h.time[i].slice(11, 16);
+      return '<div title="' + hr + " · AQI " + (v == null ? "n/a" : v) + (lv ? " · " + LEVELS[lv].label : "") + '" style="height:' + Math.max(4, ((v || 0) / top) * 100) + "%;background:var(--" + (lv || "muted") + ')"></div>';
+    }).join("");
+    $("axisStart").textContent = "now";
+    $("axisMid").textContent = h.time[idx[12]] ? h.time[idx[12]].slice(11, 16) : "";
+    $("axisEnd").textContent = h.time[idx[idx.length - 1]] ? h.time[idx[idx.length - 1]].slice(11, 16) : "";
+    const valid = vals.filter((v) => v != null);
+    if (valid.length) {
+      const worst = Math.max(...valid), best = Math.min(...valid);
+      $("fcNote").textContent = "Expected range " + best + " to " + worst + ". " + (levelOf(worst) === levelOf(aqi) ? "Little change expected." : LEVELS[levelOf(worst)].rank > LEVELS[level || "good"].rank ? "Likely to turn " + LEVELS[levelOf(worst)].label.toLowerCase() + " at some point." : "Likely to improve.");
+    } else $("fcNote").textContent = "";
+    renderChips();
+  }
+
+  function renderChips() {
+    const items = state.saved.map((l) => {
+      const snap = state.snapshots[keyOf(l)];
+      const col = snap ? "var(--" + snap.level + ")" : "var(--muted)";
+      const cur = state.loc && keyOf(l) === keyOf(state.loc);
+      return '<span class="chip" ' + (cur ? 'aria-current="true"' : "") + '><span class="dot" style="background:' + col + '"></span><button class="go" data-go="' + esc(keyOf(l)) + '">' + esc(l.name) + (snap ? " · " + snap.aqi : "") + '</button><button class="x" data-rm="' + esc(keyOf(l)) + '" aria-label="Remove ' + esc(l.name) + '">×</button></span>';
+    });
+    const canSave = state.loc && !state.saved.some((l) => keyOf(l) === keyOf(state.loc));
+    if (canSave) items.push('<button class="chip" data-save="1">＋ Save ' + esc(state.loc.name) + " for alerts</button>");
+    $("chips").innerHTML = items.join("");
+  }
+
+  function renderLog() {
+    $("log").innerHTML = state.alerts.length
+      ? state.alerts.map((a) => "<li><time>" + esc(a.when) + "</time><span>" + esc(a.text) + "</span></li>").join("")
+      : '<li class="empty">No alerts yet.</li>';
+  }
+
+  function renderNotifyUI() {
+    const supported = "Notification" in window;
+    const btn = $("notifyBtn");
+    const on = supported && Notification.permission === "granted" && state.notifyOn;
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.textContent = on ? "🔔 Alerts on" : "🔔 Alerts off";
+    let msg = "";
+    if (!supported) msg = "This browser can't show system notifications. Alerts will appear on this page only.";
+    else if (Notification.permission === "denied") msg = "Notifications are blocked for this site. Allow them in your browser's site settings; until then alerts appear on this page only.";
+    else if (!on) msg = "Turn on alerts to get a notification when air quality gets worse.";
+    else msg = "Alerts are on. Keep this page open (a background tab is fine) to keep checking.";
+    if (location.protocol === "file:") msg += " Open the app from https:// or http://localhost for system notifications to work.";
+    $("notifyStatus").textContent = msg;
+  }
+
+  /* ---------- alerts ---------- */
+  function showBanner(level, title, body) {
+    const b = $("banner");
+    b.style.setProperty("--lv", "var(--" + level + ")");
+    $("bannerTitle").textContent = title;
+    $("bannerBody").textContent = body;
+    b.classList.add("show");
+  }
+  async function systemNotify(title, body, tag) {
+    if (!("Notification" in window) || Notification.permission !== "granted" || !state.notifyOn) return;
+    const opts = { body, tag, icon: "icon.svg", badge: "icon.svg", renotify: true, vibrate: [200, 100, 200] };
+    try {
+      const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
+      if (reg) await reg.showNotification(title, opts); else new Notification(title, opts);
+    } catch (e) { try { new Notification(title, opts); } catch (e2) {} }
+  }
+  function evaluate(loc, aqi, level) {
+    if (!level) return;
+    const k = keyOf(loc), prev = state.lastLevel[k];
+    const rank = LEVELS[level].rank, need = LEVELS[state.threshold].rank;
+    state.lastLevel[k] = level; store.set("aw.lastLevel", state.lastLevel);
+    const worsened = prev === undefined ? rank >= need : rank > LEVELS[prev].rank && rank >= need;
+    if (!worsened) return;
+    const title = "Air quality is " + LEVELS[level].label.toLowerCase() + " in " + loc.name;
+    const body = "AQI " + aqi + ". " + LEVELS[level].advice;
+    showBanner(level, title + ". ", "AQI " + aqi + ". " + LEVELS[level].advice);
+    systemNotify(title, body, "aqi-" + k);
+    state.alerts.unshift({ when: new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), text: title + " (AQI " + aqi + ")" });
+    state.alerts = state.alerts.slice(0, 8); store.set("aw.alerts", state.alerts); renderLog();
+  }
+
+  /* ---------- loading ---------- */
+  async function loadCurrent(showSpinner) {
+    if (!state.loc) return;
+    if (showSpinner) { $("hero").classList.add("skeleton"); }
+    try {
+      const air = await fetchAir(state.loc.lat, state.loc.lon);
+      state.data = { air, fetchedAt: Date.now() };
+      const r = readingFrom(air, state.scale);
+      if (r.level) state.snapshots[keyOf(state.loc)] = { aqi: r.aqi, level: r.level };
+      render();
+      evaluate(state.loc, r.aqi, r.level);
+    } catch (e) {
+      $("advice").innerHTML = '<span class="err">Could not load air quality.</span> Check your connection and try again.';
+    } finally { $("hero").classList.remove("skeleton"); }
+  }
+  async function checkSaved() {
+    for (const l of state.saved) {
+      if (state.loc && keyOf(l) === keyOf(state.loc)) continue;
+      try {
+        const air = await fetchAir(l.lat, l.lon);
+        const r = readingFrom(air, state.scale);
+        if (r.level) { state.snapshots[keyOf(l)] = { aqi: r.aqi, level: r.level }; evaluate(l, r.aqi, r.level); }
+      } catch (e) {}
+    }
+    renderChips();
+  }
+  function schedule() {
+    clearInterval(state.timer);
+    state.timer = setInterval(() => { loadCurrent(false); checkSaved(); }, state.interval * 60 * 1000);
+  }
+  function setLocation(loc, remember) {
+    state.loc = loc; if (remember !== false) store.set("aw.loc", loc);
+    $("placeName").textContent = loc.name; $("aqiNum").textContent = "--"; $("verdict").textContent = "Loading";
+    $("results").hidden = true;
+    loadCurrent(true);
+  }
+  function locate() {
+    if (!navigator.geolocation) { $("advice").textContent = "This browser can't share your location. Search for a city instead."; return; }
+    $("placeName").textContent = "Finding your location…";
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude, nm = await reverse(lat, lon);
+      setLocation({ name: nm.name, region: nm.region, lat, lon, here: true });
+    }, (err) => {
+      $("placeName").textContent = "Location unavailable";
+      $("advice").textContent = err.code === 1 ? "Location access was denied. Allow it in your browser's site settings, or search for a city above." : "Could not get your location. Search for a city above.";
+    }, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 });
+  }
+
+  /* ---------- events ---------- */
+  function showResults(res, note) {
+    const box = $("results"); box.hidden = false; box._res = res;
+    box.innerHTML = res.map((r, i) => '<button data-i="' + i + '">' + esc(r.name) + " <small>" + esc(r.region) + "</small></button>").join("") +
+      (note ? "<button disabled><small>" + esc(note) + "</small></button>" : "");
+  }
+  // Instant suggestions from the built-in Kerala list while typing
+  $("q").addEventListener("input", () => {
+    const local = localMatches($("q").value);
+    if (local.length) showResults(local); else $("results").hidden = true;
+  });
+  $("searchForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = $("q").value.trim(); if (!q) return;
+    const local = localMatches(q);
+    const box = $("results"); box.hidden = false;
+    if (!local.length) box.innerHTML = "<button disabled>Searching…</button>"; else showResults(local, "Searching more places…");
+    let online = [], failed = false;
+    try {
+      // India first (every town, village and locality), then the rest of the world
+      const [inRes, worldRes] = await Promise.all([geocode(q, "IN", 10), geocode(q, "", 5).catch(() => [])]);
+      online = inRes.concat(worldRes);
+    } catch (err) { failed = true; }
+    const all = local.slice();
+    online.forEach((o) => { if (!all.some((l) => Math.abs(l.lat - o.lat) < 0.05 && Math.abs(l.lon - o.lon) < 0.05)) all.push(o); });
+    if (!all.length) { box.innerHTML = "<button disabled>" + (failed ? "Search failed. Check your connection." : "No place found. Try a different spelling.") + "</button>"; return; }
+    showResults(all, failed ? "Online search unavailable; showing the built-in list only." : "");
+  });
+  $("results").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-i]"); if (!b) return;
+    const r = $("results")._res[+b.dataset.i]; $("q").value = ""; syncBrowse(r); setLocation(r);
+  });
+
+  // District and town pickers
+  const sSel = $("stateSel"), dSel = $("district"), tSel = $("town"), dWrap = $("districtWrap");
+  Object.keys(INDIA).forEach((s) => sSel.insertAdjacentHTML("beforeend", '<option value="' + esc(s) + '">' + esc(s) + "</option>"));
+  Object.keys(KERALA).forEach((d) => dSel.insertAdjacentHTML("beforeend", '<option value="' + esc(d) + '">' + esc(d) + "</option>"));
+  const option = (n, sel) => '<option value="' + esc(n) + '"' + (n === sel ? " selected" : "") + ">" + esc(n) + "</option>";
+  function fillTowns(list, selected) {
+    if (!list) { tSel.innerHTML = '<option value="">Choose a state first</option>'; tSel.disabled = true; return; }
+    tSel.disabled = false;
+    tSel.innerHTML = '<option value="">Choose a city or town</option>' + list.map(([n]) => option(n, selected)).join("");
+  }
+  function onState(selectedDistrict, selectedTown) {
+    const s = sSel.value;
+    const isKerala = s === "Kerala";
+    dWrap.hidden = !isKerala;
+    if (!s) { fillTowns(null); return; }
+    if (isKerala) {
+      dSel.value = selectedDistrict || "";
+      fillTowns(selectedDistrict ? KERALA[selectedDistrict] : null, selectedTown);
+      if (!selectedDistrict) tSel.innerHTML = '<option value="">Choose a district first</option>';
+    } else fillTowns(INDIA[s], selectedTown);
+  }
+  function syncBrowse(loc) {
+    sSel.value = loc && loc.state && (loc.state in INDIA) ? loc.state : "";
+    onState(loc && loc.district, loc && loc.name);
+  }
+  sSel.addEventListener("change", () => onState());
+  dSel.addEventListener("change", () => onState(dSel.value));
+  tSel.addEventListener("change", () => {
+    const hit = LOCAL.find((l) => l.state === sSel.value && l.name === tSel.value && (sSel.value !== "Kerala" || l.district === dSel.value));
+    if (hit) setLocation(hit);
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("results").hidden = true; });
+  $("locateBtn").addEventListener("click", locate);
+  $("refreshBtn").addEventListener("click", () => { loadCurrent(true); checkSaved(); });
+  $("bannerClose").addEventListener("click", () => $("banner").classList.remove("show"));
+  $("chips").addEventListener("click", (e) => {
+    const t = e.target;
+    if (t.dataset.save) { state.saved.push(state.loc); store.set("aw.saved", state.saved); renderChips(); }
+    else if (t.dataset.rm) { state.saved = state.saved.filter((l) => keyOf(l) !== t.dataset.rm); store.set("aw.saved", state.saved); renderChips(); }
+    else if (t.dataset.go) { const l = state.saved.find((x) => keyOf(x) === t.dataset.go); if (l) setLocation(l); }
+  });
+  function setScale(s) {
+    state.scale = s; store.set("aw.scale", s);
+    $("scaleUS").setAttribute("aria-pressed", s === "us"); $("scaleIN").setAttribute("aria-pressed", s === "in");
+    render();
+  }
+  $("scaleUS").addEventListener("click", () => setScale("us"));
+  $("scaleIN").addEventListener("click", () => setScale("in"));
+  $("threshold").addEventListener("change", (e) => { state.threshold = e.target.value; store.set("aw.threshold", state.threshold); });
+  $("interval").addEventListener("change", (e) => { state.interval = +e.target.value; store.set("aw.interval", state.interval); schedule(); render(); });
+  $("notifyBtn").addEventListener("click", async () => {
+    if (!("Notification" in window)) { renderNotifyUI(); return; }
+    if (state.notifyOn && Notification.permission === "granted") { state.notifyOn = false; store.set("aw.notifyOn", false); renderNotifyUI(); return; }
+    const p = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    state.notifyOn = p === "granted"; store.set("aw.notifyOn", state.notifyOn);
+    renderNotifyUI();
+    if (state.notifyOn) systemNotify("AirWatch alerts are on", "You'll be notified when air quality gets worse.", "aqi-welcome");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && state.data && Date.now() - state.data.fetchedAt > 5 * 60 * 1000) { loadCurrent(false); checkSaved(); }
+  });
+
+  /* ---------- boot ---------- */
+  $("threshold").value = state.threshold;
+  $("interval").value = String(state.interval);
+  setScale(state.scale);
+  renderLog(); renderNotifyUI(); renderChips();
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
+  schedule();
+  syncBrowse(state.loc);
+  if (state.loc && !state.loc.here) { loadCurrent(true); checkSaved(); }
+  else locate();
+  if (state.loc && state.loc.here) loadCurrent(true); // show last known place immediately while GPS refines
+})();
+</script>
+<style>@media (max-width:480px){.hide-sm{display:none}}</style>
+</body>
+</html>
